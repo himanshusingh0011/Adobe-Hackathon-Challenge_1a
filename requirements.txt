@@ -1,0 +1,6 @@
+numpy>=1.24
+onnxruntime
+opencv-python
+pytesseract
+PyMuPDF
+scikit-learn

@@ -195,18 +195,88 @@ Challenge_1a/
 
 ---
 
+Here’s the **updated section** rewritten to match the challenge’s **Docker‑only (mandatory), CPU‑only, offline** requirements and the judges’ **exact build/run** flow. I’ve kept local Python steps clearly marked as *optional for development only*.
+
+---
+
 ## Setup & Installation
 
 ### Prerequisites
 
-* **Python** 3.9+
-* **Windows/Linux/macOS**
-* (Optional) **Docker** for containerized runs
+* **Docker (mandatory)** — Judges will build and run your solution *only* via Docker on **linux/amd64**, CPU‑only, with **no internet** access.
+* *(Optional, for local development only)* **Python 3.9+** on Windows/Linux/macOS.
 
-### Python Environment
+---
+
+### Docker (REQUIRED)
+
+Your container must include all runtime dependencies **and the model** inside the image (≤ 200 MB). It must automatically read PDFs from `/app/input` and write JSONs to `/app/output` **without extra CLI flags**.
+
+**Dockerfile (excerpt)**
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM --platform=linux/amd64 python:3.9-slim
+
+WORKDIR /app
+
+# Minimal system deps; CPU-only runtime
+RUN apt-get update && apt-get install -y gcc g++ && rm -rf /var/lib/apt/lists/*
+
+# Python deps
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the ONNX student model into the image (≤ 200 MB)
+RUN mkdir -p /app/models
+COPY models/best.onnx /app/models/best.onnx
+
+# Copy application code
+COPY process_pdfs.py /app/process_pdfs.py
+
+# Sensible CPU defaults; no network used at runtime
+ENV TOKENIZERS_PARALLELISM=false
+ENV OMP_NUM_THREADS=1
+ENV NUMEXPR_MAX_THREADS=1
+
+# Auto-process /app/input -> /app/output on container start
+CMD ["python", "/app/process_pdfs.py"]
+```
+
+**Build (exactly as judges do):**
 
 ```bash
-# Create & activate a venv (recommended)
+docker build --platform linux/amd64 -t mysolutionname:somerandomidentifier .
+```
+
+**Run (Linux/macOS bash):**
+
+```bash
+docker run --rm \
+  -v "$(pwd)/input:/app/input" \
+  -v "$(pwd)/output:/app/output" \
+  --network none \
+  mysolutionname:somerandomidentifier
+```
+
+**Run (Windows PowerShell):**
+
+```powershell
+docker run --rm `
+  -v "${PWD}\input:/app/input" `
+  -v "${PWD}\output:/app/output" `
+  --network none `
+  mysolutionname:somerandomidentifier
+```
+
+> The container **auto-discovers** PDFs in `/app/input` and writes **one JSON per PDF** to `/app/output` with matching filenames. No additional arguments are required (or expected) by judges.
+
+---
+
+### Python Environment *(optional – for local development only)*
+
+```bash
+# Create & activate a venv
 python -m venv .venv
 # Windows
 .venv\Scripts\activate
@@ -230,88 +300,42 @@ regex==2023.6.3
 tqdm==4.66.1
 ```
 
-> If your PDFs are image‑only scans and you want OCR fallbacks, add `pytesseract` and ensure Tesseract is installed system‑wide.
-
-### Docker (Optional)
-
-```dockerfile
-# Dockerfile (excerpt)
-FROM python:3.9-slim
-WORKDIR /app
-RUN apt-get update && apt-get install -y gcc g++ && rm -rf /var/lib/apt/lists/*
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY process_pdfs.py .
-RUN mkdir -p /app/input /app/output /app/models
-CMD ["python", "process_pdfs.py"]
-```
-
-Build:
-
-```bash
-docker build -t pdf-outliner:latest .
-```
-
-Run (Linux/macOS bash):
-
-```bash
-docker run --rm \
-  -v "$PWD/input:/app/input:ro" \
-  -v "$PWD/output:/app/output" \
-  -v "$PWD/models:/app/models:ro" \
-  --network none \
-  pdf-outliner:latest \
-  --input_dir /app/input \
-  --output_dir /app/output \
-  --model /app/models/best.onnx \
-  --workers 8 --threads 8
-```
-
-Run (Windows PowerShell):
-
-```powershell
-docker run --rm `
-  -v "${PWD}\input:/app/input:ro" `
-  -v "${PWD}\output:/app/output" `
-  -v "${PWD}\models:/app/models:ro" `
-  --network none `
-  pdf-outliner:latest `
-  --input_dir /app/input `
-  --output_dir /app/output `
-  --model /app/models/best.onnx `
-  --workers 8 --threads 8
-```
+> For image‑only scans, you may add `pytesseract` and install Tesseract locally, but **do not** rely on internet access at runtime.
 
 ---
 
 ## Running the Pipeline
 
-### CLI
+### Docker (REQUIRED)
+
+**Linux/macOS:**
 
 ```bash
-python process_pdfs.py \
-  --input_dir ./input \
-  --output_dir ./output \
-  --model ./models/best.onnx \
-  --workers 8 \
-  --threads 8 \
-  --dpi 180 \
-  --img_size 640 \
-  --conf_thres 0.25 \
-  --iou_thres 0.45
+docker run --rm \
+  -v "$(pwd)/input:/app/input" \
+  -v "$(pwd)/output:/app/output" \
+  --network none \
+  mysolutionname:somerandomidentifier
 ```
 
-**Key flags**
+**Windows PowerShell:**
 
-* `--workers` : number of PDFs processed in parallel.
-* `--threads` : intra‑PDF parallelism (e.g., page‑level).
-* `--dpi`     : render DPI for page images (balance quality/speed).
-* `--img_size`: YOLO input size (e.g., 512 or 640).
-* `--conf_thres`, `--iou_thres`: detection filtering/NMS.
+```powershell
+docker run --rm `
+  -v "${PWD}\input:/app/input" `
+  -v "${PWD}\output:/app/output" `
+  --network none `
+  mysolutionname:somerandomidentifier
+```
 
-> Use **read‑only** bind mount for `/input` and write‑only for `/output` to maintain reproducibility.
+**Behavior:**
 
----
+* The container **automatically** processes all PDFs in `/app/input`.
+* Outputs are written to `/app/output` as `filename.json`.
+* Worker/thread/DPI/img‑size defaults are configured **inside the container** for the judges’ 8‑CPU environment; you do not need to pass flags.
+
+> Use a **read-only** bind mount for `/app/input` during your own testing if you want extra safety; the judges’ command mounts read/write by default.
+
 
 ## Evaluation & Benchmarks
 

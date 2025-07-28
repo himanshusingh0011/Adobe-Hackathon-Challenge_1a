@@ -1,7 +1,3 @@
----
-
-# Challenge 1A — Title & Outline Extraction
-
 **Adobe India Hackathon 2025** • Teacher–Student YOLOv8 + Document Heuristics
 
 ---

@@ -1,6 +1,5 @@
-**Adobe India Hackathon 2025** • Teacher–Student YOLOv8 + Document Heuristics
-
----
+Adobe India Hackathon 2025 — Teacher–Student YOLOv8 + Document Heuristics
+=========================================================================
 
 ## TL;DR
 
